@@ -1,0 +1,23 @@
+# 依存関係
+node_modules/
+
+# 環境変数（APIトークンを含む）
+.env
+.env.local
+.env.*.local
+
+# エクスポート結果（取引先とのやり取りを含むため絶対にコミットしない）
+exports/
+*.export.json
+*.export.md
+
+# キャッシュ・ログ
+.cache/
+*.log
+npm-debug.log*
+
+# OS / エディタ
+.DS_Store
+.idea/
+.vscode/
+*.swp
