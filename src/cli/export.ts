@@ -23,6 +23,8 @@ import * as log from '../util/log.js';
 interface RoomTarget {
   roomId: string;
   name: string | null;
+  /** ルームの総メッセージ数。取得漏れの検知に使う */
+  messageNum: number | null;
 }
 
 async function main(): Promise<void> {
@@ -87,11 +89,13 @@ async function main(): Promise<void> {
   for (const [index, target] of targets.entries()) {
     const label = `[${index + 1}/${targets.length}] room ${target.roomId}`;
     let roomName = target.name;
+    let messageNum = target.messageNum;
 
     try {
       if (roomName === null) {
         const room = await client.getRoom(target.roomId);
         roomName = room?.name ?? `room_${target.roomId}`;
+        messageNum = room?.message_num ?? null;
       }
       log.info(`${label} ${roomName}`);
 
@@ -113,6 +117,14 @@ async function main(): Promise<void> {
           );
         },
       });
+
+      // 取りこぼしがあるときは、ルームの総件数と突き合わせて規模を具体的に示す
+      if (!result.coveredFrom && messageNum !== null && messageNum > result.fetchedCount) {
+        result.warnings.push(
+          `ルームの総メッセージ数 ${messageNum} 件に対し ${result.fetchedCount} 件しか取得できていません。` +
+            '指定期間の全体はカバーできていません（README「取得の仕組みと制約」を参照）。',
+        );
+      }
 
       for (const warning of result.warnings) {
         log.warn(`room ${target.roomId}: ${warning}`);
@@ -210,11 +222,15 @@ async function main(): Promise<void> {
 /** --all のときは参加中の全ルーム、そうでなければ --room で指定されたルーム。 */
 async function resolveTargets(client: ChatworkClient, args: ExportArgs): Promise<RoomTarget[]> {
   if (!args.all) {
-    return args.roomIds.map((roomId) => ({ roomId, name: null }));
+    return args.roomIds.map((roomId) => ({ roomId, name: null, messageNum: null }));
   }
   log.warn('--all が指定されています。参加中の全ルームを取得します（時間と API 回数を大きく消費します）。');
   const rooms: ChatworkRoom[] = await client.getRooms();
-  return rooms.map((room) => ({ roomId: String(room.room_id), name: room.name }));
+  return rooms.map((room) => ({
+    roomId: String(room.room_id),
+    name: room.name,
+    messageNum: room.message_num ?? null,
+  }));
 }
 
 /** --mine の account_id は環境変数優先、無ければ GET /me。 */

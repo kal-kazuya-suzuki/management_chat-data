@@ -121,7 +121,8 @@ export async function fetchMessagesInRange(
       coveredFrom = oldestSendTime !== null && oldestSendTime <= fromEpoch;
       if (!coveredFrom) {
         warnings.push(
-          'これ以上古いメッセージを取得できませんでした（同じページが返却されました）。指定期間の全体をカバーできていない可能性があります。',
+          'これ以上古いメッセージを取得できませんでした（同じページが返却され、message_id パラメータが' +
+            '無視されている）。Chatwork API の「100件の壁」により、直近100件より古いメッセージは取得できません。',
         );
       }
       break;
