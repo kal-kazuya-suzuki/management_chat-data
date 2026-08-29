@@ -1,6 +1,6 @@
 /**
  * npm run me — 自分の account_id を表示する。
- * .env の CHATWORK_MY_ACCOUNT_ID に設定しておくと --mine で API 呼び出しを1回減らせる。
+ * env の CHATWORK_MY_ACCOUNT_ID に設定しておくと --mine で API 呼び出しを1回減らせる。
  */
 import { loadConfig } from '../config.js';
 import { ChatworkClient } from '../chatwork/client.js';
@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   if (me.organization_name) log.out(`組織            : ${me.organization_name}`);
   if (me.department) log.out(`部署            : ${me.department}`);
   log.out('');
-  log.out('.env に以下を追記しておくと --mine が1リクエスト分速くなります:');
+  log.out('env に以下を追記しておくと --mine が1リクエスト分速くなります:');
   log.out(`  CHATWORK_MY_ACCOUNT_ID=${me.account_id}`);
 }
 

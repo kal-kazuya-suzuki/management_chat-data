@@ -13,8 +13,8 @@ Chatwork の会話を **期間とルームを指定して** エクスポート�
 
 ```bash
 npm install
-cp .env.example .env
-# .env を開いて CHATWORK_API_TOKEN を設定する
+cp env.example env
+# env を開いて CHATWORK_API_TOKEN を設定する
 ```
 
 API トークンは Chatwork Web 版 → 右上のアイコン → **サービス連携** → **API Token** から取得できます。
@@ -80,7 +80,7 @@ room_id    種別          件数  ルーム名
 npm run me
 ```
 
-表示された `account_id` を `.env` の `CHATWORK_MY_ACCOUNT_ID` に入れておくと、
+表示された `account_id` を `env` の `CHATWORK_MY_ACCOUNT_ID` に入れておくと、
 `--mine` 実行時の `GET /me` を1回省けます。
 
 ### テスト・型チェック
@@ -175,7 +175,7 @@ Markdown はルームごとに1ファイルです。
 npm run export -- --room=123456789 --mine --min-length=30 --format=md
 ```
 
-- 自分の `account_id` は `.env` の `CHATWORK_MY_ACCOUNT_ID`、無ければ `GET /me` から自動取得します
+- 自分の `account_id` は `env` の `CHATWORK_MY_ACCOUNT_ID`、無ければ `GET /me` から自動取得します
 - **Markdown には直前の相手の発言も併記します**。「どういう問いかけに、どう返しているか」が分かる形になります
 - 自分の発言が連続する場合は、同じ相手の発言の下にまとめます
 - `--min-length`（既定 20）未満の発言（「了解です」「ありがとうございます」など）は除外します。
@@ -293,7 +293,8 @@ Chatwork API の公称レート制限は **5分あたり300リクエスト** で
 
 ## 環境変数
 
-`.env` に記述します（`.env.example` をコピーして使ってください）。
+プロジェクト直下の **`env`**（ドット無し）に記述します（`env.example` をコピーして使ってください）。
+隠しファイルにならないようドットを付けていません。従来どおり `.env` を置いている場合はそちらも読み込みます（`env` があればそちらを優先）。
 
 | 変数 | 既定値 | 説明 |
 | --- | --- | --- |
@@ -312,7 +313,7 @@ Chatwork API の公称レート制限は **5分あたり300リクエスト** で
 
 **`exports/` 以下の出力ファイルには、取引先とのやり取りがそのまま含まれます。**
 
-- `exports/` と `.env` は `.gitignore` 済みです。**絶対にコミットしないでください**
+- `exports/` と `env` は `.gitignore` 済みです。**絶対にコミットしないでください**
 - 出力した Markdown / JSON を外部サービス（AI ツール、翻訳サービス、クラウドストレージ等）へ
   アップロードする際は、取引先との守秘義務・契約条件を必ず確認してください
 - ファイルには相手の氏名・`account_id`・組織名が含まれます。
@@ -330,7 +331,7 @@ Chatwork API の公称レート制限は **5分あたり300リクエスト** で
 .
 ├── src/
 │   ├── args.ts                   CLI 引数のパース
-│   ├── config.ts                 .env / 環境変数の読み込み
+│   ├── config.ts                 env / 環境変数の読み込み
 │   ├── cli/
 │   │   ├── export.ts             npm run export
 │   │   ├── rooms.ts              npm run rooms
@@ -350,6 +351,7 @@ Chatwork API の公称レート制限は **5分あたり300リクエスト** で
 │       ├── date.ts               日付・タイムゾーン
 │       ├── rate-limiter.ts       レートリミッタ
 │       └── log.ts                ログ出力
+├── env.example                   環境変数のサンプル（env にコピーして使う）
 ├── test/                         vitest（記法パーサとページング処理を中心に）
 └── exports/                      出力先（.gitignore 済み）
 ```

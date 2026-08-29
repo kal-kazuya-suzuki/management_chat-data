@@ -2,6 +2,7 @@
 node_modules/
 
 # 環境変数（APIトークンを含む）
+env
 .env
 .env.local
 .env.*.local

@@ -1,5 +1,29 @@
-/** .env / 環境変数の読み込み。 */
-import 'dotenv/config';
+/**
+ * 環境変数の読み込み。
+ *
+ * 設定ファイルはプロジェクト直下の `env`（ドット無し）。
+ * Finder やエディタで隠しファイルにならないよう、あえてドットを付けていない。
+ * 従来どおり `.env` を置いている場合はそちらも読む（`env` があればそちらを優先）。
+ * どちらも .gitignore 済み。
+ */
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { config as loadDotenv } from 'dotenv';
+
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** 実際に読み込んだ設定ファイル名（エラーメッセージ用）。見つからなければ null。 */
+export const loadedEnvFile: string | null = (() => {
+  for (const name of ['env', '.env']) {
+    const filePath = path.join(PROJECT_ROOT, name);
+    if (existsSync(filePath)) {
+      loadDotenv({ path: filePath });
+      return name;
+    }
+  }
+  return null;
+})();
 
 export interface AppConfig {
   token: string;
@@ -27,8 +51,9 @@ export function loadConfig(): AppConfig {
   if (!token) {
     throw new Error(
       'CHATWORK_API_TOKEN が設定されていません。\n' +
-        '  .env.example を .env にコピーしてトークンを設定してください:\n' +
-        '    cp .env.example .env\n' +
+        (loadedEnvFile === null
+          ? '  設定ファイルが見つかりません。env.example を env にコピーしてください:\n    cp env.example env\n'
+          : `  設定ファイル "${loadedEnvFile}" は読み込めましたが、CHATWORK_API_TOKEN が空です。\n`) +
         '  トークンは Chatwork Web版 → 右上アイコン → サービス連携 → API Token から取得できます。',
     );
   }
