@@ -170,6 +170,34 @@ describe('SlackClient', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it('権限不足のときはパブリックチャンネルだけに絞って取り直す', async () => {
+    const fetchImpl = vi.fn<FetchLike>().mockImplementation(async (url) => {
+      // private_channel を含む要求は missing_scope で失敗させる
+      if (url.includes('private_channel')) {
+        return slackResponse({ ok: false, error: 'missing_scope', needed: 'groups:read' });
+      }
+      return slackResponse({ ok: true, channels: [{ id: 'C1', name: 'general' }] });
+    });
+    const client = makeClient(fetchImpl, fakeClock());
+
+    const channels = await client.listChannels();
+
+    expect(channels.map((c) => c.id)).toEqual(['C1']);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1]?.[0]).toContain('types=public_channel');
+    expect(fetchImpl.mock.calls[1]?.[0]).not.toContain('private_channel');
+  });
+
+  it('パブリックだけを要求して権限不足なら、そのままエラーにする', async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockImplementation(async () => slackResponse({ ok: false, error: 'missing_scope', needed: 'channels:read' }));
+    const client = makeClient(fetchImpl, fakeClock());
+
+    await expect(client.listChannels({ types: 'public_channel' })).rejects.toThrow(SlackApiError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('スレッド返信もカーソルを辿る', async () => {
     const fetchImpl = vi
       .fn<FetchLike>()

@@ -126,15 +126,47 @@ export class SlackClient {
     return await this.call<SlackAuthTest>('auth.test');
   }
 
-  /** チャンネル一覧（カーソルを辿って全件）。 */
+  /**
+   * チャンネル一覧（カーソルを辿って全件）。
+   *
+   * types に権限の無い種別が混ざっていると Slack は missing_scope で全体を失敗させるため、
+   * その場合はパブリックチャンネルだけに絞って取り直す。
+   * （プライベートチャンネルの「一覧」には groups:read が必要だが、
+   *   「履歴」は groups:history だけで取れるので、IDを直接指定すればエクスポートはできる）
+   */
   async listChannels(options: { types?: string; excludeArchived?: boolean } = {}): Promise<SlackChannel[]> {
+    const requested = options.types ?? 'public_channel,private_channel';
+    try {
+      return await this.listChannelsWithTypes(requested, options.excludeArchived);
+    } catch (error) {
+      const fallback = 'public_channel';
+      if (
+        error instanceof SlackApiError &&
+        error.slackError === 'missing_scope' &&
+        requested.includes(fallback) &&
+        requested !== fallback
+      ) {
+        log.warn(
+          `トークンの権限が足りないため、一覧をパブリックチャンネルだけに絞りました（${requested} → ${fallback}）。`,
+        );
+        log.step(
+          'プライベートチャンネルを一覧するには groups:read が必要です。' +
+            '一覧に出なくても、チャンネルIDを直接指定すればエクスポートはできます。',
+        );
+        return await this.listChannelsWithTypes(fallback, options.excludeArchived);
+      }
+      throw error;
+    }
+  }
+
+  private async listChannelsWithTypes(types: string, excludeArchived?: boolean): Promise<SlackChannel[]> {
     const channels: SlackChannel[] = [];
     let cursor: string | undefined;
 
     do {
       const response = await this.call<SlackConversationsListResponse>('conversations.list', {
-        types: options.types ?? 'public_channel,private_channel',
-        exclude_archived: options.excludeArchived === false ? 'false' : 'true',
+        types,
+        exclude_archived: excludeArchived === false ? 'false' : 'true',
         limit: '200',
         ...(cursor ? { cursor } : {}),
       });

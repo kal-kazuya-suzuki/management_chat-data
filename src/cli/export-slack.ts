@@ -270,6 +270,13 @@ async function resolveTargets(
     if (isChannelId(ref)) {
       const info = await client.getChannelInfo(ref);
       const name = info?.name ?? ref;
+      // Bot トークンで未参加のチャンネルは履歴が取れないので、取得前に知らせる
+      if (info?.is_member === false) {
+        log.warn(
+          `#${name} には Bot が参加していません。履歴の取得に失敗する可能性があります` +
+            '（チャンネルで /invite してください）。',
+        );
+      }
       channelNames.set(ref, name);
       targets.push({ id: ref, name });
       continue;

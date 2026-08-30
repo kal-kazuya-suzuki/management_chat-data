@@ -17,6 +17,33 @@ Chatwork 記法・Slack mrkdwn のパーサも本プロジェクト内に実装�
 
 ---
 
+## これだけ覚えれば動きます
+
+`env` の設定は済んでいます。**IDと期間を入れて走らせるだけ**です。
+
+```bash
+# Chatwork
+npm run export -- --room=337086524 --from=2026-07-01 --to=2026-08-30
+
+# Slack
+npm run export:slack -- --channel=C0ANP54V9CG --from=2026-07-01 --to=2026-08-30
+```
+
+- `--to` を省くと今日まで。`--from` も省くと直近30日
+- 出力は `./exports/` に JSON と Markdown の両方
+- 文体サンプルが欲しいときは `--mine` を足す
+- IDが分からないときは `npm run rooms`（Chatwork）/ `npm run channels`（Slack）
+
+```bash
+npm run rooms                    # Chatwork のルーム一覧
+npm run channels -- --member-only  # Slack で Bot が入っているチャンネル
+```
+
+**Slack は Bot が参加しているチャンネルのみ対象です。** 新しいチャンネルを出したいときは、
+そのチャンネルで `/invite @<Bot名>` してから実行してください。
+
+---
+
 ## セットアップ
 
 必要環境: Node.js 20 以上
@@ -472,16 +499,35 @@ Slack は 2026-03-03 以降、**Marketplace 未掲載の配布アプリ**に対�
 
 ### 必要なスコープ
 
-| スコープ | 用途 |
-| --- | --- |
-| `channels:history` / `channels:read` | パブリックチャンネル |
-| `groups:history` / `groups:read` | プライベートチャンネル |
-| `im:history` / `im:read` | DM |
-| `mpim:history` / `mpim:read` | グループDM |
-| `users:read` | ユーザー名の解決 |
+| スコープ | 用途 | 現在のBotトークン |
+| --- | --- | --- |
+| `channels:history` | パブリックチャンネルの履歴 | ✅ |
+| `channels:read` | パブリックチャンネルの一覧・情報 | ✅ |
+| `groups:history` | プライベートチャンネルの履歴 | ✅ |
+| `groups:read` | プライベートチャンネルの**一覧** | ❌ |
+| `users:read` | ユーザー名の解決 | ✅ |
+| `im:history` / `im:read` | DM | ❌ |
+| `mpim:history` / `mpim:read` | グループDM | ❌ |
 
-Bot トークン（`xoxb-`）の場合、Bot が参加しているチャンネルしか履歴を取得できません
-（`not_in_channel` エラー）。チャンネルで `/invite` するか、ユーザートークン（`xoxp-`）を使ってください。
+`groups:read` が無いと `conversations.list` が丸ごと失敗するため、本 CLI は
+**パブリックチャンネルだけに絞って自動で取り直します**（警告を出します）。
+プライベートチャンネルは一覧に出ませんが、`groups:history` はあるので
+**チャンネルIDを直接指定すればエクスポートできます**。
+
+### Bot トークンとユーザートークン
+
+現在は **Bot トークン（`xoxb-`）** で運用しています。
+
+- **Bot が参加しているチャンネルのみ**履歴を取得できます（未参加だと `not_in_channel`）。
+  新しいチャンネルを対象にするときは `/invite @<Bot名>` してください
+- 実行前に `conversations.info` の `is_member` を見て、未参加なら先に警告します
+- `--mine` で使う自分の user_id は、Bot トークンだと `auth.test` が Bot 自身のIDを返すため、
+  `env` の `SLACK_MY_USER_ID` に**ご本人のID**を設定してあります
+
+Bot の参加なしに全チャンネルを出したい場合はユーザートークン（`xoxp-`）が必要ですが、
+上表の User Token Scopes を追加して**アプリを再インストール（＝トークンは再発行）**する必要があります。
+`env` にはユーザートークンの行をコメントアウトで残してあるので、新しいトークンを入れて
+`#` を外せば自動的にそちらが優先されます。
 
 ## 環境変数
 
