@@ -71,3 +71,62 @@ export function loadConfig(): AppConfig {
     maxRetries: readInt('CHATWORK_MAX_RETRIES', 5),
   };
 }
+
+export interface SlackConfig {
+  token: string;
+  /** どの環境変数から読んだか（エラーメッセージ用） */
+  tokenSource: string;
+  baseUrl: string;
+  myUserId: string | null;
+  tzOffset: string;
+  rateLimit: number;
+  rateWindowSeconds: number;
+  minIntervalMs: number;
+  maxRetries: number;
+}
+
+/**
+ * Slack のトークンは SLACK_TOKEN を第一候補にしつつ、
+ * 既存の slack-chat-hub と同じキー名（SLACK_USER_TOKEN / SLACK_BOT_TOKEN）も受け付ける。
+ * ユーザートークンの方が見える範囲が広いので、そちらを優先する。
+ */
+const SLACK_TOKEN_KEYS = ['SLACK_TOKEN', 'SLACK_USER_TOKEN', 'SLACK_BOT_TOKEN'] as const;
+
+export function loadSlackConfig(): SlackConfig {
+  let token = '';
+  let tokenSource = '';
+  for (const key of SLACK_TOKEN_KEYS) {
+    const value = (process.env[key] ?? '').trim();
+    if (value) {
+      token = value;
+      tokenSource = key;
+      break;
+    }
+  }
+
+  if (!token) {
+    throw new Error(
+      'Slack のトークンが設定されていません。\n' +
+        `  ${SLACK_TOKEN_KEYS.join(' / ')} のいずれかを設定してください。\n` +
+        (loadedEnvFile === null
+          ? '  設定ファイルが見つかりません。env.example を env にコピーしてください:\n    cp env.example env\n'
+          : `  設定ファイル: ${loadedEnvFile}\n`) +
+        '  トークンは https://api.slack.com/apps でアプリを作り、\n' +
+        '  OAuth & Permissions の画面から取得できます（必要なスコープは README を参照）。',
+    );
+  }
+
+  const myUserId = (process.env.SLACK_MY_USER_ID ?? '').trim();
+
+  return {
+    token,
+    tokenSource,
+    baseUrl: (process.env.SLACK_API_BASE ?? 'https://slack.com/api').trim(),
+    myUserId: myUserId === '' ? null : myUserId,
+    tzOffset: (process.env.CHATWORK_TZ_OFFSET ?? process.env.SLACK_TZ_OFFSET ?? '+09:00').trim(),
+    rateLimit: readInt('SLACK_RATE_LIMIT', 50),
+    rateWindowSeconds: readInt('SLACK_RATE_WINDOW_SEC', 60),
+    minIntervalMs: readInt('SLACK_MIN_INTERVAL_MS', 200),
+    maxRetries: readInt('SLACK_MAX_RETRIES', 5),
+  };
+}

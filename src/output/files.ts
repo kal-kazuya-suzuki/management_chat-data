@@ -19,6 +19,8 @@ export function sanitizeForFilename(input: string, maxLength = 40): string {
 }
 
 export interface FileNameParts {
+  /** ファイル名の先頭に付ける識別子。既定は 'chatwork' */
+  platform?: string;
   roomId: string;
   roomName: string;
   from: string;
@@ -30,7 +32,7 @@ export interface FileNameParts {
 /** 例: chatwork_123456789_サンプル株式会社_2026-08-01_2026-08-29_mine.md */
 export function buildFileName(parts: FileNameParts): string {
   const segments = [
-    'chatwork',
+    parts.platform ?? 'chatwork',
     parts.roomId,
     sanitizeForFilename(parts.roomName),
     parts.from,

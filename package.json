@@ -1,8 +1,8 @@
 {
-  "name": "chatwork-export",
+  "name": "management-chat-data",
   "version": "0.1.0",
   "private": true,
-  "description": "Chatwork の会話を期間とルームを指定してエクスポートする CLI",
+  "description": "Chatwork / Slack の会話を期間と部屋を指定してエクスポートする CLI",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -11,6 +11,9 @@
     "export": "tsx src/cli/export.ts",
     "rooms": "tsx src/cli/rooms.ts",
     "me": "tsx src/cli/me.ts",
+    "export:slack": "tsx src/cli/export-slack.ts",
+    "channels": "tsx src/cli/channels.ts",
+    "me:slack": "tsx src/cli/me-slack.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

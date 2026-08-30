@@ -4,6 +4,8 @@ import type { ExportedMessage } from './record.js';
 export interface MarkdownContext {
   roomId: string;
   roomName: string;
+  /** 見出しに出す ID のラベル。Chatwork は room_id、Slack は channel_id */
+  idLabel?: string;
   from: string;
   to: string;
   tzLabel: string;
@@ -11,6 +13,8 @@ export interface MarkdownContext {
   /** message_id → 返信先の発言者名 */
   replyNames?: Map<string, string | null>;
   warnings?: string[];
+  /** 仕様上の注意（警告ほど強くないもの） */
+  notes?: string[];
 }
 
 const CONFIDENTIAL_NOTE =
@@ -27,7 +31,7 @@ function header(context: MarkdownContext, title: string, extraLines: string[]): 
   const lines = [
     `# ${title}`,
     '',
-    `- room_id: ${context.roomId}`,
+    `- ${context.idLabel ?? 'room_id'}: ${context.roomId}`,
     `- 期間: ${context.from} 〜 ${context.to} (${context.tzLabel})`,
     ...extraLines,
     `- 生成日時: ${context.generatedAt}`,
@@ -39,6 +43,13 @@ function header(context: MarkdownContext, title: string, extraLines: string[]): 
     lines.push('> **取得に関する警告**');
     for (const warning of context.warnings) {
       lines.push(`> - ${warning}`);
+    }
+    lines.push('');
+  }
+  if (context.notes && context.notes.length > 0) {
+    lines.push('> **補足**');
+    for (const note of context.notes) {
+      lines.push(`> - ${note}`);
     }
     lines.push('');
   }
@@ -92,7 +103,7 @@ export function renderMineMarkdown(
 
   const lines = header(context, `${context.roomName} — 自分の発言（文体サンプル）`, [
     `- 自分の account_id: ${options.myAccountId}`,
-    `- 抽出条件: 自分の発言のうち ${options.minLength} 文字以上（Chatwork記法を除去した本文の文字数）`,
+    `- 抽出条件: 自分の発言のうち ${options.minLength} 文字以上（記法を除去した本文の文字数）`,
     `- 件数: ${total}`,
   ]);
 
