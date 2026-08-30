@@ -22,6 +22,8 @@ Chatwork 記法・Slack mrkdwn のパーサも本プロジェクト内に実装�
 `env` の設定は済んでいます。**IDと期間を入れて走らせるだけ**です。
 
 ```bash
+cd ~/Documents/management_chat-data
+
 # Chatwork
 npm run export -- --room=337086524 --from=2026-07-01 --to=2026-08-30
 
@@ -40,7 +42,7 @@ npm run channels -- --member-only  # Slack で Bot が入っているチャン�
 ```
 
 **Slack は Bot が参加しているチャンネルのみ対象です。** 新しいチャンネルを出したいときは、
-そのチャンネルで `/invite @<Bot名>` してから実行してください。
+そのチャンネルで `/invite @chat` してから実行してください（Bot の表示名は `chat`）。
 
 ---
 
