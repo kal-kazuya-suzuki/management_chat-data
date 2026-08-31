@@ -45,6 +45,11 @@ const SIGNATURE_MARKERS: RegExp[] = [
   /\bE-?mail\b\s*[:：]/i,
   /(株式会社|有限会社|合同会社|Inc\.|Co\.,\s*Ltd)/,
   /Mobile\s*[:：]/i,
+  // ラベルの付かない電話番号だけの行（"070-3537-4209" のような署名は実在する）
+  /(^|\s)0\d{1,3}-\d{2,4}-\d{4}(\s|$)/,
+  /(^|\s)\+81[-\d]{9,}(\s|$)/,
+  // 行がまるごとメールアドレス
+  /^\s*[\w.+-]+@[\w-]+\.[\w.-]+\s*$/m,
 ];
 
 export interface CleanupOptions {
@@ -118,28 +123,32 @@ function findSignatureStart(lines: readonly string[]): number {
     if (hasSignatureMarker(after)) return i;
   }
 
-  // 3. 末尾の連続ブロックが署名の手がかりを含むなら、そのブロックごと切る
-  //    （区切り線を使わない署名のため。誤爆を避けて末尾12行までに限定する）
-  const blockSearchStart = Math.max(0, lines.length - 12);
-  const tail = lines.slice(blockSearchStart).join('\n');
-  if (!hasSignatureMarker(tail)) return -1;
+  // 3. 区切り線を使わない署名のため、**末尾のブロックだけ**を見る。
+  //    「本文中に電話番号が出てくる」ようなケースを署名と誤判定しないよう、
+  //    手がかりが末尾ブロックの中にある場合に限って切る。
+  const start = trailingBlockStart(lines);
+  if (start === -1) return -1;
 
-  let markerLine = -1;
-  for (let i = lines.length - 1; i >= blockSearchStart; i -= 1) {
-    if (hasSignatureMarker(lines[i] as string)) {
-      markerLine = i;
-      break;
-    }
-  }
-  if (markerLine === -1) return -1;
-
-  // 手がかりのある行から上に遡り、空行に当たったところをブロックの先頭とする
-  let start = markerLine;
-  while (start > 0 && (lines[start - 1] as string).trim() !== '') {
-    start -= 1;
-  }
+  const block = lines.slice(start);
+  // 長すぎるブロックは本文の可能性が高い
+  if (block.length > 8) return -1;
+  if (!hasSignatureMarker(block.join('\n'))) return -1;
   // 本文全体が署名扱いになるのは明らかにおかしいので、その場合は切らない
   if (start === 0) return -1;
+  return start;
+}
+
+/**
+ * 末尾のブロック（最後の空行より後ろ）の開始行を返す。
+ * 末尾の空行は無視する。ブロックが見つからなければ -1。
+ */
+function trailingBlockStart(lines: readonly string[]): number {
+  let end = lines.length - 1;
+  while (end >= 0 && (lines[end] as string).trim() === '') end -= 1;
+  if (end < 0) return -1;
+
+  let start = end;
+  while (start > 0 && (lines[start - 1] as string).trim() !== '') start -= 1;
   return start;
 }
 

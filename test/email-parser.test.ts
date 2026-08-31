@@ -297,3 +297,83 @@ describe('cleanEmailBody', () => {
     expect(cleanEmailBody('一行目\n\n\n\n二行目')).toBe('一行目\n\n二行目');
   });
 });
+
+describe('stripSignature（実データで見つかったパターン）', () => {
+  it('TEL: の接頭辞が無い電話番号だけの署名も落とす', () => {
+    const text = [
+      '菅宮さま',
+      '',
+      'ご連絡ありがとうございます。',
+      'いただいた日程で問題ありませんので、よろしくお願いいたします。',
+      '',
+      '--------------------',
+      'KAL',
+      'Kazuya Suzuki',
+      '070-3537-4209',
+    ].join('\n');
+
+    expect(stripSignature(text)).toBe(
+      '菅宮さま\n\nご連絡ありがとうございます。\nいただいた日程で問題ありませんので、よろしくお願いいたします。',
+    );
+  });
+
+  it('アドレスだけの行がある署名も落とす', () => {
+    const text = '本文です。\n\n--------------------\n山田太郎\nyamada@example.com';
+    expect(stripSignature(text)).toBe('本文です。');
+  });
+
+  it('本文中の電話番号は署名扱いしない', () => {
+    const text = 'お問い合わせは 03-1234-5678 までお願いします。\n\n以上、よろしくお願いいたします。';
+    expect(stripSignature(text)).toBe(text);
+  });
+
+  it('転送メールの引用を落とすと署名だけが残る場合、署名も落として空になる', () => {
+    const text = [
+      '--------------------',
+      'KAL',
+      'Kazuya Suzuki',
+      '070-3537-4209',
+      '',
+      '---------- Forwarded message ---------',
+      'From: 送信元 <a@example.com>',
+      '本文',
+    ].join('\n');
+
+    expect(cleanEmailBody(text)).toBe('');
+  });
+});
+
+describe('stripSignature（誤爆しないこと）', () => {
+  it('本文の途中に電話番号があっても、その後ろの本文を切らない', () => {
+    const text = [
+      'お世話になっております。',
+      '',
+      'お問い合わせは 03-1234-5678 までお願いします。',
+      '',
+      '以上、よろしくお願いいたします。',
+    ].join('\n');
+    expect(stripSignature(text)).toBe(text);
+  });
+
+  it('末尾ブロックが長い場合は本文とみなして切らない', () => {
+    const text = [
+      '本文の冒頭です。',
+      '',
+      '弊社は株式会社サンプルと申します。',
+      '事業内容は以下のとおりです。',
+      '1. あああ',
+      '2. いいい',
+      '3. ううう',
+      '4. えええ',
+      '5. おおお',
+      '6. かかか',
+      '7.供給体制について',
+    ].join('\n');
+    expect(stripSignature(text)).toBe(text);
+  });
+
+  it('末尾ブロックが署名なら切る', () => {
+    const text = '本文です。\n\n株式会社サンプル\n山田太郎\n03-1234-5678';
+    expect(stripSignature(text)).toBe('本文です。');
+  });
+});
