@@ -2,7 +2,7 @@
   "name": "management-chat-data",
   "version": "0.1.0",
   "private": true,
-  "description": "Chatwork / Slack の会話を期間と部屋を指定してエクスポートする CLI",
+  "description": "Chatwork / Slack / Gmail のやり取りを期間指定でエクスポートする CLI",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -14,6 +14,9 @@
     "export:slack": "tsx src/cli/export-slack.ts",
     "channels": "tsx src/cli/channels.ts",
     "me:slack": "tsx src/cli/me-slack.ts",
+    "export:gmail": "tsx src/cli/export-gmail.ts",
+    "gmail:auth": "tsx src/cli/gmail-auth.ts",
+    "labels": "tsx src/cli/labels.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

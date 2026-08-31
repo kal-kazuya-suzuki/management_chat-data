@@ -130,3 +130,74 @@ export function loadSlackConfig(): SlackConfig {
     maxRetries: readInt('SLACK_MAX_RETRIES', 5),
   };
 }
+
+export interface GmailConfig {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  /** トークン端点。通常は変更不要（テストや社内プロキシ用の逃げ道） */
+  tokenEndpoint: string | null;
+  /** 自分のメールアドレス。未設定なら users.getProfile から取得する */
+  myAddress: string | null;
+  baseUrl: string;
+  userId: string;
+  tzOffset: string;
+  rateLimit: number;
+  rateWindowSeconds: number;
+  minIntervalMs: number;
+  maxRetries: number;
+  /** 同意フローで使うループバックポート */
+  authPort: number;
+}
+
+/** OAuth クライアント（同意フロー用。リフレッシュトークンはまだ無くてよい）。 */
+export function loadGmailClientCredentials(): { clientId: string; clientSecret: string; authPort: number } {
+  const clientId = (process.env.GMAIL_CLIENT_ID ?? '').trim();
+  const clientSecret = (process.env.GMAIL_CLIENT_SECRET ?? '').trim();
+
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      'GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET が設定されていません。\n' +
+        '  Google Cloud コンソールで OAuth クライアント（種類: デスクトップアプリ）を作り、\n' +
+        '  クライアントIDとシークレットを env に設定してください。\n' +
+        '  手順は README の「Gmail のセットアップ」を参照してください。' +
+        (loadedEnvFile === null ? '\n  設定ファイルが見つかりません（env.example を env にコピーしてください）。' : ''),
+    );
+  }
+
+  return { clientId, clientSecret, authPort: readInt('GMAIL_AUTH_PORT', 8765) };
+}
+
+export function loadGmailConfig(): GmailConfig {
+  const { clientId, clientSecret, authPort } = loadGmailClientCredentials();
+  const refreshToken = (process.env.GMAIL_REFRESH_TOKEN ?? '').trim();
+
+  if (!refreshToken) {
+    throw new Error(
+      'GMAIL_REFRESH_TOKEN が設定されていません。\n' +
+        '  次のコマンドで一度だけ認証してください:\n' +
+        '    npm run gmail:auth\n' +
+        '  ブラウザで同意すると、env に設定する値が表示されます。',
+    );
+  }
+
+  const myAddress = (process.env.GMAIL_MY_ADDRESS ?? '').trim().toLowerCase();
+
+  const tokenEndpoint = (process.env.GMAIL_TOKEN_ENDPOINT ?? '').trim();
+
+  return {
+    clientId,
+    clientSecret,
+    refreshToken,
+    tokenEndpoint: tokenEndpoint === '' ? null : tokenEndpoint,
+    myAddress: myAddress === '' ? null : myAddress,
+    baseUrl: (process.env.GMAIL_API_BASE ?? 'https://gmail.googleapis.com/gmail/v1').trim(),
+    userId: (process.env.GMAIL_USER_ID ?? 'me').trim(),
+    tzOffset: (process.env.CHATWORK_TZ_OFFSET ?? '+09:00').trim(),
+    rateLimit: readInt('GMAIL_RATE_LIMIT', 200),
+    rateWindowSeconds: readInt('GMAIL_RATE_WINDOW_SEC', 10),
+    minIntervalMs: readInt('GMAIL_MIN_INTERVAL_MS', 50),
+    maxRetries: readInt('GMAIL_MAX_RETRIES', 5),
+    authPort,
+  };
+}

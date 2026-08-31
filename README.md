@@ -1,19 +1,20 @@
 # management-chat-data
 
-**Chatwork** と **Slack** の会話を、期間と部屋（ルーム / チャンネル）を指定してエクスポートする CLI です。
+**Chatwork** / **Slack** / **Gmail** のやり取りを、期間を指定してエクスポートする CLI です。
 
 やり取りの分析、文体サンプルの作成、AI への入力データの用意を想定しています。
 単体で動作し、他プロジェクト（slack-chat-hub など）には依存しません。
-Chatwork 記法・Slack mrkdwn のパーサも本プロジェクト内に実装しています。
+Chatwork 記法・Slack mrkdwn・メールの MIME / 引用 / 署名のパーサも、すべて本プロジェクト内に実装しています。
 
-| | Chatwork | Slack |
-| --- | --- | --- |
-| エクスポート | `npm run export` | `npm run export:slack` |
-| 部屋の一覧 | `npm run rooms` | `npm run channels` |
-| 自分のID | `npm run me` | `npm run me:slack` |
-| 期間の全件取得 | **不可**（[100件の壁](#-100件の壁重要)） | 可能 |
+| | Chatwork | Slack | Gmail |
+| --- | --- | --- | --- |
+| エクスポート | `npm run export` | `npm run export:slack` | `npm run export:gmail` |
+| 一覧 | `npm run rooms` | `npm run channels` | `npm run labels` |
+| 自分のID | `npm run me` | `npm run me:slack` | （認証時に表示） |
+| 期間の全件取得 | **不可**（[100件の壁](#-100件の壁重要)） | 可能 | 可能 |
+| 単位 | ルーム | チャンネル | スレッド |
 
-出力形式（JSON / Markdown）、`--mine` による文体サンプル抽出、期間の既定値は両者で共通です。
+出力形式（JSON / Markdown）、`--mine` による文体サンプル抽出、期間の既定値は3つで共通です。
 
 ---
 
@@ -29,12 +30,16 @@ npm run export -- --room=337086524 --from=2026-07-01 --to=2026-08-30
 
 # Slack
 npm run export:slack -- --channel=C0ANP54V9CG --from=2026-07-01 --to=2026-08-30
+
+# Gmail（自分が送信したメールと、そのスレッド全体）
+npm run export:gmail -- --from=2026-07-01 --to=2026-08-30
 ```
 
 - `--to` を省くと今日まで。`--from` も省くと直近30日
 - 出力は `./exports/` に JSON と Markdown の両方
 - 文体サンプルが欲しいときは `--mine` を足す
 - IDが分からないときは `npm run rooms`（Chatwork）/ `npm run channels`（Slack）
+- Gmail は ID 指定が不要（期間だけ）。取引先で絞るなら `--query="to:example.co.jp"`
 
 ```bash
 npm run rooms                    # Chatwork のルーム一覧
@@ -186,6 +191,58 @@ npm run me:slack
 
 ---
 
+## 使い方（Gmail）
+
+### セットアップ（初回のみ）
+
+Chatwork / Slack と違い、Gmail は OAuth の設定が必要です。管理者権限は不要で、
+ご自身のアカウントだけで完結します。
+
+1. [Google Cloud コンソール](https://console.cloud.google.com/)でプロジェクトを選び、**Gmail API を有効化**
+2. **OAuth 同意画面** を作成。**User type は「内部」**にする
+   （「外部・テスト中」だとリフレッシュトークンが**7日で失効**します）
+3. **認証情報 → OAuth クライアント ID** を作成。種類は**デスクトップアプリ**
+4. クライアントIDとシークレットを `env` に設定
+5. `npm run gmail:auth` を実行 → ブラウザで同意 → 表示された `GMAIL_REFRESH_TOKEN` を `env` に設定
+
+必要なスコープは `gmail.readonly`（読み取り専用）だけです。
+
+### 会話のエクスポート
+
+```bash
+npm run export:gmail -- --from=2026-07-01
+npm run export:gmail -- --from=2026-07-01 --query="to:example.co.jp"
+```
+
+**既定では「自分が送信したメール」で期間を絞り、該当したスレッド全体を取得します。**
+相手の返信も文脈として含まれるので、やり取りがそのまま残ります。
+
+| オプション | 既定値 | 説明 |
+| --- | --- | --- |
+| `--from` / `--to` | Chatwork / Slack と同じ | 期間（両端を含む） |
+| `--query=<検索式>` | – | Gmail の検索構文を追加（`to:` `from:` `label:` `has:attachment` など） |
+| `--all-mail` | off | 自分の送信メールに限らず、受信メールも起点にする |
+| `--format=json\|md\|both` | `both` | 出力形式 |
+| `--mine` | off | 自分が送信したメールのみを出力（相手の直前のメールも併記） |
+| `--min-length=N` | `20` | `--mine` のとき、N 文字未満の本文を除外 |
+| `--keep-quotes` | off | 引用返信（`>` の部分）を残す |
+| `--keep-signature` | off | 署名を残す |
+| `--out` / `--tz` | 共通 | 出力先・タイムゾーン |
+| `--page-size=N` | `500` | 1リクエストの列挙件数（最大500） |
+| `--max-pages=N` | `100` | 列挙の最大ページ数 |
+| `--max-threads=N` | `2000` | 取得するスレッド数の上限 |
+
+### ラベル一覧
+
+```bash
+npm run labels
+npm run labels -- --user-only    # 自分で作ったラベルだけ
+```
+
+`--query="label:取引先/TENGA"` のように使えます。
+
+---
+
 ## 出力
 
 出力先は既定で `./exports/`。ファイル名にはルームIDと期間が入ります。
@@ -196,9 +253,13 @@ exports/chatwork_123456789_サンプル株式会社_定例_2026-08-01_2026-08-29
 exports/chatwork_123456789_サンプル株式会社_定例_2026-08-01_2026-08-29_mine.md   # --mine のとき
 exports/slack_C0123ABCD_web-project_2026-07-01_2026-08-30.json                   # Slack
 exports/slack_C0123ABCD_web-project_2026-07-01_2026-08-30.md
+exports/gmail_kazuya.suzuki_2026-07-01_2026-08-30.json                          # Gmail
+exports/gmail_kazuya.suzuki_2026-07-01_2026-08-30.md
 ```
 
-先頭が `chatwork_` / `slack_` になり、続けて ルーム・チャンネルのID、名前、期間が入ります。
+先頭が `chatwork_` / `slack_` / `gmail_` になり、続けて対象（ルームID・チャンネルID・
+メールアドレス）と期間が入ります。Chatwork / Slack は部屋ごとに1ファイル、
+Gmail は実行ごとに1ファイル（中でスレッドごとに区切る）です。
 
 Markdown はルームごとに1ファイルです。
 
@@ -248,6 +309,23 @@ Slack のレコードには、さらに以下が付きます。
 
 Slack の `message_id` / `room_id` はそれぞれ `ts` / `channel_id` が入ります
 （Markdown の見出しには `channel_id:` と表示されます）。
+
+Gmail のレコードには、さらに以下が付きます。
+
+| フィールド | 説明 |
+| --- | --- |
+| `thread_id` | スレッドID（`room_id` と同じ値） |
+| `subject` | 件名（`Re:` を含む生のもの。`room_name` は `Re:` を外したもの） |
+| `from` / `to` / `cc` | 送信者・宛先・CC のメールアドレス |
+| `is_mine` | 自分が送信したメールなら `true` |
+| `files` | 添付ファイル名の配列 |
+| `body_source` | 本文が `text/plain` 由来か `text/html` 由来か |
+| `labels` | Gmail のラベルID |
+
+Gmail の `message_id` / `room_id` / `account_id` はそれぞれ
+メッセージID / スレッドID / 送信者のメールアドレスが入ります。
+`reply_to` は `In-Reply-To` から引いた返信先のメッセージID、
+`mentions` は宛先（To + Cc）のアドレスです。
 
 ### Markdown
 
@@ -531,6 +609,88 @@ Bot の参加なしに全チャンネルを出したい場合はユーザート�
 `env` にはユーザートークンの行をコメントアウトで残してあるので、新しいトークンを入れて
 `#` を外せば自動的にそちらが優先されます。
 
+---
+
+## メール本文の整形（Gmail）
+
+メールはチャットと違い、本文が MIME の入れ子になっていて、引用と署名が毎回付いてきます。
+文体サンプルとして使う場合ここが品質を左右するので、次の処理をしています。
+
+### 本文の取り出し
+
+- `text/plain` を優先し、無ければ `text/html` を平文化する（`body_source` にどちらか記録）
+- 入れ子の `multipart/*` を辿る。添付として付いている `text/plain` は本文と区別する
+- HTML は `<br>` `<p>` などを改行にし、タグを除去、`&amp;` などの実体参照を戻す
+- 添付ファイル名は本文の末尾に追記する（本文が空でも内容が分かるように）
+
+### 引用返信の除去（`--keep-quotes` で無効化）
+
+引用を残すと、同じ文面が返信のたびに重複して混ざるため既定で落とします。
+
+| 検出するパターン | 例 |
+| --- | --- |
+| 引用記号 | `> 元の本文` / `＞ 元の本文` |
+| 日本語の引用ヘッダ | `2026年8月30日(土) 10:00 山田太郎 <yamada@example.com>:` |
+| 英語の引用ヘッダ | `On Sat, Aug 30, 2026 at 10:00 AM Taro <t@example.com> wrote:`（折り返しにも対応） |
+| Outlook 形式 | `-----元のメッセージ-----` / `差出人:` / `________________________` |
+| 日本語クライアント | `山田太郎さんは書きました:` |
+
+`条件は A > B です。` のような**本文中の不等号は引用扱いしません**。
+
+### 署名の除去（`--keep-signature` で無効化）
+
+署名を残すと会社名・電話番号が全メールの末尾に付いてくるため既定で落とします。
+判定は「確信が持てるときだけ切る」方針で、次の順に見ます。
+
+1. `-- ` だけの行（RFC 3676 の標準的な区切り）→ そこから下を切る
+2. 末尾近くの区切り線（`----------`）の後に署名らしさがあれば切る
+3. 区切り線が無くても、末尾12行以内に `〒` `TEL:` `E-mail:` `株式会社` などがあれば
+   そのブロックごと切る
+
+**本文全体が署名扱いになる場合は切りません。** 削りすぎるほうが害が大きいためです。
+
+---
+
+## Gmail の取得の仕組みと制約
+
+Chatwork と違い、Gmail は検索構文で**期間を直接指定でき**、`pageToken` による
+正式なページングがあるため、**指定期間の取りこぼしは起きません**。
+
+### 取得の流れ
+
+1. `users.messages.list` に `from:me after:<epoch> before:<epoch>` を渡し、
+   `nextPageToken` を辿って自分の送信メールを期間分すべて列挙する
+2. その `threadId` を重複排除する
+3. スレッドごとに `users.threads.get` を呼び、**相手のメールを含むやり取り全体**を取得する
+
+日付は `YYYY/MM/DD` ではなく **UNIX 秒**で渡しています（`YYYY/MM/DD` だと
+Gmail 側のタイムゾーン設定に解釈が依存してしまうため）。実際に使ったクエリは
+Markdown のヘッダにも記録されます。
+
+### 期間の判定基準
+
+**期間は「自分が送信したメールの日付」で判定します。**
+該当したスレッドは全体を取得するので、期間より前に始まったやり取りも文脈として含まれます。
+これは意図的な挙動で、実行時に補足として表示されます。
+
+`--all-mail` を付けると、受信メールも起点になります。
+
+### レート制限
+
+Gmail の割り当ては **250 units/秒/ユーザー**（`messages.list` = 5、`threads.get` = 10 単位）で、
+3つの中では最も緩いです。本 CLI は既定で 10秒あたり200リクエストに抑えています。
+
+- `429` と `403 rateLimitExceeded` は `Retry-After` を見て待機し、再試行します
+- `403 ACCESS_TOKEN_SCOPE_INSUFFICIENT` はスコープ不足なので、再試行せず対処法を表示します
+- リクエスト数は「スレッド数 + 列挙ページ数」でおおよそ決まります
+
+### リフレッシュトークンの失効
+
+OAuth 同意画面が**「外部・テスト中」だとリフレッシュトークンは7日で失効**します。
+`invalid_grant` エラーが出たらこれが原因です。**User type を「内部」**にすれば失効しません。
+
+---
+
 ## 環境変数
 
 プロジェクト直下の **`env`**（ドット無し）に記述します（`env.example` をコピーして使ってください）。
@@ -559,7 +719,20 @@ Bot の参加なしに全チャンネルを出したい場合はユーザート�
 | `SLACK_MIN_INTERVAL_MS` | `200` | リクエスト間の最小間隔（ミリ秒） |
 | `SLACK_MAX_RETRIES` | `5` | リトライ回数 |
 
-タイムゾーン（`CHATWORK_TZ_OFFSET`）は Chatwork / Slack で共通です。
+### Gmail
+
+| 変数 | 既定値 | 説明 |
+| --- | --- | --- |
+| `GMAIL_CLIENT_ID` | **必須** | OAuth クライアントID（デスクトップアプリ） |
+| `GMAIL_CLIENT_SECRET` | **必須** | OAuth クライアントシークレット |
+| `GMAIL_REFRESH_TOKEN` | **必須** | `npm run gmail:auth` で取得 |
+| `GMAIL_MY_ADDRESS` | – | 自分のアドレス。未設定なら `users.getProfile` から自動取得 |
+| `GMAIL_AUTH_PORT` | `8765` | 同意フローのループバックポート |
+| `GMAIL_API_BASE` / `GMAIL_USER_ID` | 既定でOK | 通常は変更不要 |
+| `GMAIL_RATE_LIMIT` / `GMAIL_RATE_WINDOW_SEC` | `200` / `10` | レート制限 |
+| `GMAIL_MIN_INTERVAL_MS` / `GMAIL_MAX_RETRIES` | `50` / `5` | 間隔とリトライ |
+
+タイムゾーン（`CHATWORK_TZ_OFFSET`）は Chatwork / Slack / Gmail で共通です。
 
 ---
 
@@ -592,7 +765,10 @@ Bot の参加なしに全チャンネルを出したい場合はユーザート�
 │   │   ├── me.ts                 npm run me            (Chatwork)
 │   │   ├── export-slack.ts       npm run export:slack  (Slack)
 │   │   ├── channels.ts           npm run channels      (Slack)
-│   │   └── me-slack.ts           npm run me:slack      (Slack)
+│   │   ├── me-slack.ts           npm run me:slack      (Slack)
+│   │   ├── export-gmail.ts       npm run export:gmail  (Gmail)
+│   │   ├── gmail-auth.ts         npm run gmail:auth    (Gmail)
+│   │   └── labels.ts             npm run labels        (Gmail)
 │   ├── chatwork/
 │   │   ├── client.ts             API クライアント（レート制限・リトライ）
 │   │   ├── pager.ts              期間指定のページング
@@ -603,15 +779,24 @@ Bot の参加なしに全チャンネルを出したい場合はユーザート�
 │   │   ├── pager.ts              期間指定のカーソルページング＋スレッド返信
 │   │   ├── users.ts              user_id → 名前の解決とキャッシュ
 │   │   └── types.ts              API のレスポンス型
+│   ├── gmail/
+│   │   ├── auth.ts               OAuth（同意フローとトークン更新）
+│   │   ├── client.ts             API クライアント（レート制限・リトライ）
+│   │   ├── pager.ts              期間指定の列挙＋スレッド取得
+│   │   └── types.ts              API のレスポンス型・アドレス解析
 │   ├── parser/
 │   │   ├── chatwork-tags.ts      Chatwork 記法のパーサ
-│   │   └── slack-markup.ts       Slack mrkdwn のパーサ
-│   ├── output/                   ← Chatwork / Slack で共通
+│   │   ├── slack-markup.ts       Slack mrkdwn のパーサ
+│   │   ├── mime.ts               MIME から本文を取り出す（HTML の平文化含む）
+│   │   └── email-cleanup.ts      引用返信と署名の除去
+│   ├── output/                   ← 3つで共通
 │   │   ├── record.ts             出力レコードへの変換（Chatwork）
 │   │   ├── slack-record.ts       出力レコードへの変換（Slack）
+│   │   ├── gmail-record.ts       出力レコードへの変換（Gmail）
 │   │   ├── markdown.ts           Markdown 生成
+│   │   ├── gmail-markdown.ts     Markdown 生成（スレッド単位）
 │   │   └── files.ts              ファイル名と書き出し
-│   └── util/                     ← Chatwork / Slack で共通
+│   └── util/                     ← 3つで共通
 │       ├── date.ts               日付・タイムゾーン
 │       ├── rate-limiter.ts       レートリミッタ
 │       ├── table.ts              コンソール表の整形
@@ -621,9 +806,10 @@ Bot の参加なしに全チャンネルを出したい場合はユーザート�
 └── exports/                      出力先（.gitignore 済み）
 ```
 
-Slack のレコードは Chatwork と同じ `ExportedMessage` の形に揃えているため、
+Slack / Gmail のレコードは Chatwork と同じ `ExportedMessage` の形に揃えているため、
 Markdown 生成・ファイル名・`--mine` の抽出ロジックをそのまま共有しています
-（Slack 固有の `thread_ts` / `subtype` / `files` は追加フィールドとして持ちます）。
+（Slack の `thread_ts` / `subtype`、Gmail の `subject` / `to` / `cc` / `is_mine` などは
+追加フィールドとして持ちます）。
 
 ログはすべて stderr に出力し、stdout は成果物（`npm run rooms` の一覧など）専用にしています。
 `npm run rooms -- --json > rooms.json` のようにパイプできます。

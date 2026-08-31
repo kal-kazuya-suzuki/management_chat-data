@@ -44,6 +44,9 @@ const BOOLEAN_FLAGS = new Set([
   'no-threads',
   'include-system',
   'no-bots',
+  'all-mail',
+  'keep-quotes',
+  'keep-signature',
 ]);
 const KNOWN_FLAGS = new Set([
   'room',
@@ -60,6 +63,26 @@ const KNOWN_FLAGS = new Set([
   'verbose',
   'help',
 ]);
+/** Gmail 版で使うフラグ */
+const GMAIL_FLAGS = new Set([
+  'from',
+  'to',
+  'format',
+  'mine',
+  'min-length',
+  'out',
+  'tz',
+  'query',
+  'all-mail',
+  'keep-quotes',
+  'keep-signature',
+  'max-pages',
+  'max-threads',
+  'page-size',
+  'verbose',
+  'help',
+]);
+
 /** Slack 版で追加になるフラグ */
 const SLACK_FLAGS = new Set([
   'channel',
@@ -458,4 +481,123 @@ Slack の会話を期間とチャンネルを指定してエクスポートし�
   npm run export:slack -- --channel=C0123ABCD --from=2026-07-01
   npm run export:slack -- --channel=#general,#random --format=md
   npm run export:slack -- --channel=C0123ABCD --mine --min-length=30 --no-threads
+`.trim();
+
+// ============================================================
+// Gmail 版
+// ============================================================
+
+export interface GmailExportArgs {
+  from: string;
+  to: string;
+  format: OutputFormat;
+  mine: boolean;
+  minLength: number;
+  outDir: string;
+  tzOffsetMinutes: number;
+  /** 追加の Gmail 検索クエリ */
+  query: string | null;
+  /** 自分の送信メールに限らず、受信も起点にする */
+  allMail: boolean;
+  /** 引用返信を残す */
+  keepQuotes: boolean;
+  /** 署名を残す */
+  keepSignature: boolean;
+  maxPages: number;
+  maxThreads: number;
+  pageSize: number;
+  verbose: boolean;
+  help: boolean;
+}
+
+export const DEFAULT_GMAIL_PAGE_SIZE = 500;
+export const DEFAULT_GMAIL_MAX_PAGES = 100;
+export const DEFAULT_GMAIL_MAX_THREADS = 2000;
+
+export function parseGmailExportArgs(
+  argv: readonly string[],
+  context: ParseContext = {},
+): GmailExportArgs {
+  const raw = tokenize(argv, GMAIL_FLAGS);
+
+  if (raw.positionals.length > 0) {
+    throw new ArgError(
+      `オプション以外の引数は受け付けません: ${raw.positionals.join(' ')}\n（--from=2026-07-01 のように指定してください）`,
+    );
+  }
+
+  const help = boolean(raw, 'help');
+  const tzOffsetMinutes = parseTzOffset(single(raw, 'tz') ?? context.defaultTz ?? '+09:00');
+  const today = context.today ?? todayInTz(tzOffsetMinutes);
+
+  const to = single(raw, 'to') ?? today;
+  const from = single(raw, 'from') ?? shiftDays(to, -(DEFAULT_RANGE_DAYS - 1));
+
+  parseDateOnly(from);
+  parseDateOnly(to);
+  if (from > to) {
+    throw new ArgError(`--from が --to より後になっています: ${from} > ${to}`);
+  }
+
+  const maxPages = parseNonNegativeInt(single(raw, 'max-pages'), DEFAULT_GMAIL_MAX_PAGES, '--max-pages');
+  if (maxPages < 1) throw new ArgError('--max-pages は 1 以上で指定してください。');
+
+  const pageSize = parseNonNegativeInt(single(raw, 'page-size'), DEFAULT_GMAIL_PAGE_SIZE, '--page-size');
+  if (pageSize < 1 || pageSize > 500) {
+    throw new ArgError('--page-size は 1〜500 の範囲で指定してください。');
+  }
+
+  const query = single(raw, 'query')?.trim();
+
+  return {
+    from,
+    to,
+    format: parseFormat(single(raw, 'format')),
+    mine: boolean(raw, 'mine'),
+    minLength: parseNonNegativeInt(single(raw, 'min-length'), DEFAULT_MIN_LENGTH, '--min-length'),
+    outDir: single(raw, 'out') ?? context.defaultOutDir ?? DEFAULT_OUT_DIR,
+    tzOffsetMinutes,
+    query: query ? query : null,
+    allMail: boolean(raw, 'all-mail'),
+    keepQuotes: boolean(raw, 'keep-quotes'),
+    keepSignature: boolean(raw, 'keep-signature'),
+    maxPages,
+    maxThreads: parseNonNegativeInt(single(raw, 'max-threads'), DEFAULT_GMAIL_MAX_THREADS, '--max-threads'),
+    pageSize,
+    verbose: boolean(raw, 'verbose'),
+    help,
+  };
+}
+
+export const GMAIL_EXPORT_USAGE = `
+Gmail のやり取りを期間を指定してエクスポートします。
+
+既定では「自分が送信したメール」で期間を絞り、該当したスレッド全体
+（相手の返信を含む）を取得します。
+
+使い方:
+  npm run export:gmail -- [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [options]
+
+オプション:
+  --from=YYYY-MM-DD   期間の開始日（含む）。既定: --to の ${DEFAULT_RANGE_DAYS - 1} 日前
+  --to=YYYY-MM-DD     期間の終了日（含む）。既定: 今日
+  --query=<検索式>    Gmail の検索構文を追加で指定（例: --query="to:example.com"）
+  --all-mail          自分の送信メールに限らず、受信メールも起点にする
+  --format=json|md|both  出力形式。既定: both
+  --mine              自分が送信したメールのみを出力（相手の直前のメールも併記）
+  --min-length=N      --mine のとき、N 文字未満の本文を除外。既定: ${DEFAULT_MIN_LENGTH}
+  --out=<dir>         出力先ディレクトリ。既定: ${DEFAULT_OUT_DIR}
+  --tz=+09:00         日付の解釈に使うタイムゾーン。既定: +09:00 (JST)
+  --keep-quotes       引用返信（> の部分）を残す。既定は除去
+  --keep-signature    署名を残す。既定は除去
+  --page-size=N       1リクエストの列挙件数。既定: ${DEFAULT_GMAIL_PAGE_SIZE}（最大500）
+  --max-pages=N       列挙の最大ページ数。既定: ${DEFAULT_GMAIL_MAX_PAGES}
+  --max-threads=N     取得するスレッド数の上限。既定: ${DEFAULT_GMAIL_MAX_THREADS}
+  --verbose, -v       詳細ログを出す
+  --help, -h          このヘルプを表示
+
+例:
+  npm run export:gmail -- --from=2026-07-01
+  npm run export:gmail -- --from=2026-07-01 --query="to:example.co.jp"
+  npm run export:gmail -- --from=2026-07-01 --mine --min-length=40 --format=md
 `.trim();
