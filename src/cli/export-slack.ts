@@ -11,7 +11,7 @@ import {
   type SlackExportArgs,
 } from '../args.js';
 import { loadSlackConfig, type SlackConfig } from '../config.js';
-import { SlackClient } from '../slack/client.js';
+import { SlackApiError, SlackClient } from '../slack/client.js';
 import { fetchChannelMessages } from '../slack/pager.js';
 import { UserDirectory } from '../slack/users.js';
 import type { SlackChannel } from '../slack/types.js';
@@ -268,7 +268,23 @@ async function resolveTargets(
   const targets: ChannelTarget[] = [];
   for (const ref of args.channels) {
     if (isChannelId(ref)) {
-      const info = await client.getChannelInfo(ref);
+      // 名前の取得は「あれば嬉しい」情報。conversations.info には groups:read が要るが、
+      // 履歴の取得には groups:history だけあれば足りるので、権限不足で全体を諦めない。
+      let info: SlackChannel | null = null;
+      try {
+        info = await client.getChannelInfo(ref);
+      } catch (error) {
+        if (error instanceof SlackApiError && error.slackError === 'missing_scope') {
+          log.warn(
+            `${ref} のチャンネル情報を取得できませんでした（conversations.info に権限が不足）。` +
+              'IDをそのまま名前として使い、履歴の取得は続行します。',
+          );
+          log.step('プライベートチャンネルの情報取得には groups:read が必要です。');
+        } else {
+          throw error;
+        }
+      }
+
       const name = info?.name ?? ref;
       // Bot トークンで未参加のチャンネルは履歴が取れないので、取得前に知らせる
       if (info?.is_member === false) {
